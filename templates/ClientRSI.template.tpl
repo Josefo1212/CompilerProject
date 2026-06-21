@@ -20,24 +20,31 @@ export class {{CLASS_NAME}}ClientRSI extends {{CLASS_NAME}}Proxy {
      * Canal centralizado de comunicacion TCP con semantica Request-Response.
      * Abre un socket por peticion y lo cierra al recibir la respuesta.
      *
-     * @param {Object} payload - Objeto estructurado { metodo, args }
-     * @returns {Promise<any>}  Respuesta asincrona del servidor deserializada
+     * @param {String} nomMetodo - Nombre del metodo a invocar
+     * @param {...any} args - Array of arguments for the payload
+     * @returns {Promise<any>} Respuesta asincrona del servidor deserializada
      */
-    _enviarPeticion(payload) {
+    _enviarPeticion(nomMetodo, ...args) {
         return new Promise((resolve, reject) => {
             const socket = createConnection({ port: this.port, host: this.host }, () => {
-                // Marshalling: serializacion del objeto a JSON para transmision en red
-                socket.write(JSON.stringify(payload));
+                // Marshalling (Protocolo Luismi): Formato nombreMetodo|parametro1,parametro2
+                const params = args.join(',');
+                const payload = `${nomMetodo}|${params}`;
+                socket.write(payload);
             });
 
             socket.on('data', (buffer) => {
                 try {
-                    // Unmarshalling: deserializacion de la respuesta recibida por red
-                    const data = JSON.parse(buffer.toString());
+                    // Unmarshalling (Protocolo Luismi): Separar STATUS|RESULTADO
+                    const respuesta = buffer.toString().trim();
                     socket.end(); // Cierre ordenado del socket tras recibir la respuesta
+                    
+                    const partes = respuesta.split('|');
+                    const status = partes[0];
+                    const data = partes[1] || '';
 
-                    if (data.error) return reject(new Error(data.error));
-                    resolve(data.resultado);
+                    if (status === 'ERROR') return reject(new Error(data));
+                    resolve(data);
                 } catch (err) {
                     socket.destroy();
                     reject(new Error('Error al decodificar la respuesta del servidor: ' + err.message));

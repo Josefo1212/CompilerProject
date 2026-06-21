@@ -25,22 +25,23 @@ export class {{CLASS_NAME}}ServerRSI {
 
             socket.on('data', async (buffer) => {
                 try {
-                    // Unmarshalling: desempaquetado del mensaje recibido por red
-                    const { metodo, args } = JSON.parse(buffer.toString());
-                    console.log(`[SERVER_RSI] Invocacion remota: ${metodo}()`);
+                    // Unmarshalling (Protocolo Luismi): desempaquetar string metodo|arg1,arg2
+                    const mensaje = buffer.toString().trim();
+                    const partes = mensaje.split('|');
+                    const metodo = partes[0];
+                    const argsStr = partes[1] || '';
+                    const args = argsStr ? argsStr.split(',') : [];
+
+                    console.log(`[SERVER_RSI] Invocacion remota: ${metodo}() con args: ${argsStr}`);
 
                     switch (metodo) {
 {{METODOS_SERVIDOR}}
                         default:
-                            socket.write(JSON.stringify({
-                                error: `Metodo '${metodo}' sin soporte remoto.`
-                            }));
+                            socket.write(`ERROR|Metodo '${metodo}' sin soporte remoto.`);
                     }
                 } catch (err) {
-                    // Marshalling del error para devolverlo al cliente
-                    socket.write(JSON.stringify({
-                        error: 'Fallo de procesamiento en red: ' + err.message
-                    }));
+                    // Marshalling del error para devolverlo al cliente en formato Luismi
+                    socket.write(`ERROR|Fallo de procesamiento en red: ${err.message}`);
                 }
             });
 

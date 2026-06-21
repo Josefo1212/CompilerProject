@@ -1,1 +1,15 @@
 package.json
+
+pnpm-lock.yaml
+
+# Dependencias
+node_modules/
+
+# Archivos auto-generados por el compilador
+client/
+server/
+
+# Archivos de entorno y logs
+.env
+*.log
+.DS_Store

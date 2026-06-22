@@ -42,6 +42,4 @@ export class ClientRSI extends Proxy {
             });
         });
     }
-
-{{CLIENT_METHODS}}
 }

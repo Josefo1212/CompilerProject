@@ -100,34 +100,18 @@ class SDLCompiler {
         const { className } = metadata;
         const { client: clientDir, server: serverDir } = this.outputDirs;
 
-        const proxyMethods = metadata.methods.map(m => {
-            return `    ${m.name}(${m.parameters.join(', ')}) {\n        throw new Error("Abstract method: ${m.name} must be implemented in ClientRSI");\n    }`;
-        }).join('\n\n');
-
         const codeProxy = this.applyTemplate('Proxy.template.tpl', {
             CLASS_NAME: className,
-            PROXY_METHODS: proxyMethods,
         });
-
-        const clientMethods = metadata.methods.map(m => {
-            const paramList = m.parameters.join(', ');
-            const argsArray = m.parameters.length > 0 ? paramList : '';
-            return (
-                `    async ${m.name}(${paramList}) {
-        return this._sendRequest('${m.name}', ${argsArray});
-    }`
-            );
-        }).join('\n\n');
 
         const codeClientRSI = this.applyTemplate('ClientRSI.template.tpl', {
             CLASS_NAME: className,
             PORT: metadata.port,
-            CLIENT_METHODS: clientMethods,
         });
 
         const testCalls = metadata.methods.map(m => {
-            const defaultArgs = m.parameters.map(p => `"test_${p}"`).join(', ');
-            return `        const res_${m.name} = await client.${m.name}(${defaultArgs});\n        console.log("Result for ${m.name}:", res_${m.name});`;
+            const defaultArgs = m.parameters.map(p => `"${p}"`).join(', ');
+            return `        const res_${m.name} = await client.${m.name}(${defaultArgs});\n        console.log(res_${m.name});`;
         }).join('\n');
 
         const codeClientScript = this.applyTemplate('Client.template.tpl', {
@@ -152,7 +136,8 @@ class SDLCompiler {
         });
 
         const serviceMethods = metadata.methods.map(m => {
-            return `    ${m.name}(${m.parameters.join(', ')}) {\n        console.log("Executing ${m.name} with:", ${m.parameters.length ? m.parameters.join(', ') : 'null'});\n        return "Hello from Server for: ${m.name}";\n    }`;
+            const paramRef = m.parameters.length > 0 ? m.parameters[0] : 'null';
+            return `    ${m.name}(${m.parameters.join(', ')}) {\n        console.log("Executing ${m.name} with:", ${m.parameters.length ? m.parameters.join(', ') : 'null'});\n        return "Hello from Server " + ${paramRef};\n    }`;
         }).join('\n\n');
 
         const codeService = this.applyTemplate('Service.template.tpl', {

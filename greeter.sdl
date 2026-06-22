@@ -1,0 +1,4 @@
+@port:9090
+@class Greeter {
+    @method sayHello(name)
+}

@@ -1,5 +1,0 @@
-@port:9090
-@ip:localhost
-@class Saludador {
-    @method decirHola(nombre)
-}

@@ -1,47 +1,33 @@
+import 'dotenv/config';
 import { createServer } from 'net';
-import { {{CLASS_NAME}}BO } from './{{CLASS_NAME}}BO.js';
+import { Service } from './Service.js';
 
-/**
- * {{CLASS_NAME}}ServerRSI -- Capa de Transporte TCP (Skeleton / Lado Servidor)
- * Generado por SDL Compiler | Parte de Laura
- *
- * Escucha conexiones TCP de forma persistente, deserializa la peticion
- * entrante (unmarshalling), invoca el metodo real en el BO y devuelve
- * el resultado serializado (marshalling) al cliente.
- */
-export class {{CLASS_NAME}}ServerRSI {
+export class ServerRSI {
     constructor() {
-        this.port = {{PUERTO}};
-        this.bo = new {{CLASS_NAME}}BO();
+        this.port = {{PORT}};
+        this.service = new Service();
     }
 
-    /**
-     * Inicializa el demonio persistente TCP para escuchar conexiones remotas.
-     * El servidor permanece activo hasta que el proceso sea terminado.
-     */
-    iniciar() {
+    start() {
         const server = createServer((socket) => {
-            console.log(`[SERVER_RSI] Conexion establecida desde: ${socket.remoteAddress}:${socket.remotePort}`);
+            console.log(`[SERVER_RSI] Connection from: ${socket.remoteAddress}:${socket.remotePort}`);
 
             socket.on('data', async (buffer) => {
                 try {
-                    // Unmarshalling (Protocolo Luismi): desempaquetar string metodo|arg1,arg2
-                    const mensaje = buffer.toString().trim();
-                    const partes = mensaje.split('|');
-                    const metodo = partes[0];
-                    const argsStr = partes[1] || '';
+                    const message = buffer.toString().trim();
+                    const parts = message.split('|');
+                    const method = parts[0];
+                    const argsStr = parts[1] || '';
                     const args = argsStr ? argsStr.split(',') : [];
+                    console.log(`[SERVER_RSI] Remote call: ${method}() with args: ${argsStr}`);
 
-                    console.log(`[SERVER_RSI] Invocacion remota: ${metodo}() con args: ${argsStr}`);
-
-                    switch (metodo) {
-{{METODOS_SERVIDOR}}
+                    switch (method) {
+{{SERVER_METHODS}}
                         default:
-                            socket.write(`ERROR|Metodo '${metodo}' sin soporte remoto.`);
+                            socket.write(`ERROR|Method '${method}' not supported.`);
                     }
                 } catch (err) {
-                    // Marshalling del error para devolverlo al cliente en formato Luismi
-                    socket.write(`ERROR|Fallo de procesamiento en red: ${err.message}`);
+                    socket.write(`ERROR|Network processing error: ${err.message}`);
                 }
             });
 
@@ -50,16 +36,16 @@ export class {{CLASS_NAME}}ServerRSI {
             });
 
             socket.on('end', () => {
-                console.log('[SERVER_RSI] Conexion cerrada por el cliente.');
+                console.log('[SERVER_RSI] Connection closed by client.');
             });
         });
 
-        server.listen(this.port, () => {
-            console.log(`[SERVER TCP] Escuchando activamente en el puerto ${this.port}`);
+        server.listen(this.port, process.env.SERVER_IP, () => {
+            console.log(`[SERVER TCP] Listening on port ${this.port}`);
         });
 
         server.on('error', (err) => {
-            console.error(`[SERVER ERR]: No se pudo iniciar el servidor: ${err.message}`);
+            console.error(`[SERVER ERR]: Failed to start server: ${err.message}`);
         });
     }
 }

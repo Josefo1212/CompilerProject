@@ -2,13 +2,12 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-// Configuración para emular __dirname en ES Modules nativos
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 class SDLCompiler {
 
-    constructor(idlFile = 'saludo.sdl') {
+    constructor(idlFile = 'greeter.sdl') {
         this.idlPath = join(process.cwd(), idlFile);
         this.templatesDir = join(__dirname, 'templates');
         this.outputDirs = {
@@ -17,17 +16,13 @@ class SDLCompiler {
         };
     }
 
-    // ----------------------------------------------------------------
-    // MOTOR DE PLANTILLAS (Laura): lee un .tpl y sustituye placeholders
-    // ----------------------------------------------------------------
     applyTemplate(templateName, vars) {
         const tplPath = join(this.templatesDir, templateName);
         if (!existsSync(tplPath)) {
-            throw new Error(`Plantilla no encontrada: ${tplPath}`);
+            throw new Error(`Template not found: ${tplPath}`);
         }
         let tpl = readFileSync(tplPath, 'utf-8');
         for (const [key, value] of Object.entries(vars)) {
-            // Reemplaza todas las ocurrencias de {{KEY}}
             tpl = tpl.replaceAll(`{{${key}}}`, value);
         }
         return tpl;
@@ -35,73 +30,64 @@ class SDLCompiler {
 
     compile() {
         try {
-            console.log(`[🚀 COMPILER] Iniciando compilación de de: ${this.idlPath}`);
+            console.log(`[🚀 COMPILER] Starting compilation from: ${this.idlPath}`);
 
             const metadata = this.parseSDL();
             this.prepareDirectories();
             this.generateArtifacts(metadata);
 
-            console.log('\n[✨ SUCCESS] Arquitectura distribuida generada con éxito en /client y /server.');
+            console.log('\n[✨ SUCCESS] Distributed architecture generated successfully in /client and /server.');
         } catch (error) {
-            console.error(`[❌ ERROR] Fallo en la compilación: ${error.message}`);
+            console.error(`[❌ ERROR] Compilation failed: ${error.message}`);
         }
     }
 
-    // ----------------------------------------------------------------
-    // 1. PARSER CORE: Extracción y limpieza de la Metadata del SDL
-    // ----------------------------------------------------------------
     parseSDL() {
         if (!existsSync(this.idlPath)) {
-            throw new Error(`Archivo contractual "${this.idlPath}" no encontrado.`);
+            throw new Error(`Contract file "${this.idlPath}" not found.`);
         }
 
-        const contenido = readFileSync(this.idlPath, 'utf-8');
-        const lineas = contenido.split(/\r?\n/).map(line => line.trim());
+        const content = readFileSync(this.idlPath, 'utf-8');
+        const lines = content.split(/\r?\n/).map(line => line.trim());
 
         let port = '';
-        let ip = '';
         let className = '';
         const methods = [];
 
-        for (const linea of lineas) {
-            if (!linea || linea.startsWith('}')) continue;
+        for (const line of lines) {
+            if (!line || line.startsWith('}')) continue;
 
-            if (linea.startsWith('@port:')) {
-                port = linea.split(':')[1]?.trim();
-            } else if (linea.startsWith('@ip:')) {
-                ip = linea.split(':')[1]?.trim();
-            } else if (linea.startsWith('@class ')) {
-                className = linea.replace('@class ', '').replace('{', '').trim();
-            } else if (linea.startsWith('@method ')) {
-                methods.push(this.extractMethodMetadata(linea));
+            if (line.startsWith('@port:')) {
+                port = line.split(':')[1]?.trim();
+            } else if (line.startsWith('@class ')) {
+                className = line.replace('@class ', '').replace('{', '').trim();
+            } else if (line.startsWith('@method ')) {
+                methods.push(this.extractMethodMetadata(line));
             }
         }
 
-        if (!port || !ip || !className) {
-            throw new Error('Formato SDL inválido. Faltan directivas obligatorias (@port, @ip o @class).');
+        if (!port || !className) {
+            throw new Error('Invalid SDL format. Missing required directives (@port or @class).');
         }
 
-        return { port, ip, className, methods };
+        return { port, className, methods };
     }
 
-    extractMethodMetadata(linea) {
-        const textoCompleto = linea.replace('@method ', '').trim();
-        const [nombreMetodo, paramsRaw] = textoCompleto.split('(');
+    extractMethodMetadata(line) {
+        const fullText = line.replace('@method ', '').trim();
+        const [methodName, rawParams] = fullText.split('(');
 
-        const parametros = paramsRaw
-            ? paramsRaw.replace(')', '').split(',').map(p => p.trim()).filter(Boolean)
+        const parameters = rawParams
+            ? rawParams.replace(')', '').split(',').map(p => p.trim()).filter(Boolean)
             : [];
 
         return {
-            textoCompleto,
-            nombre: nombreMetodo.trim(),
-            parametros
+            fullText,
+            name: methodName.trim(),
+            parameters
         };
     }
 
-    // ----------------------------------------------------------------
-    // 2. INFRAESTRUCTURA: Inicialización del File System
-    // ----------------------------------------------------------------
     prepareDirectories() {
         Object.values(this.outputDirs).forEach(dir => {
             if (!existsSync(dir)) {
@@ -110,60 +96,50 @@ class SDLCompiler {
         });
     }
 
-    // ----------------------------------------------------------------
-    // 3. ENGINE: Generación de código asíncrono limpio (ESM)
-    // ----------------------------------------------------------------
     generateArtifacts(metadata) {
         const { className } = metadata;
         const { client: clientDir, server: serverDir } = this.outputDirs;
 
-        // --- MOLDES LADO CLIENTE (STUBS) ---
-        // Proxy: plantilla de Luismi (Proxy.template.tpl)
-        const metodosProxy = metadata.methods.map(m => {
-            return `    ${m.nombre}(${m.parametros.join(', ')}) {\n        throw new Error("Abstract method: ${m.nombre} must be implemented in ClientRSI");\n    }`;
+        const proxyMethods = metadata.methods.map(m => {
+            return `    ${m.name}(${m.parameters.join(', ')}) {\n        throw new Error("Abstract method: ${m.name} must be implemented in ClientRSI");\n    }`;
         }).join('\n\n');
 
         const codeProxy = this.applyTemplate('Proxy.template.tpl', {
             CLASS_NAME: className,
-            METODOS_PROXY: metodosProxy,
+            PROXY_METHODS: proxyMethods,
         });
 
-        // ClientRSI: plantilla de Laura (ClientRSI.template.tpl)
-        const metodosCliente = metadata.methods.map(m => {
-            const paramList = m.parametros.join(', ');
-            const argsArray = m.parametros.length > 0 ? paramList : '';
+        const clientMethods = metadata.methods.map(m => {
+            const paramList = m.parameters.join(', ');
+            const argsArray = m.parameters.length > 0 ? paramList : '';
             return (
-                `    async ${m.nombre}(${paramList}) {
-        return this._enviarPeticion('${m.nombre}', ${argsArray});
+                `    async ${m.name}(${paramList}) {
+        return this._sendRequest('${m.name}', ${argsArray});
     }`
             );
         }).join('\n\n');
 
         const codeClientRSI = this.applyTemplate('ClientRSI.template.tpl', {
             CLASS_NAME: className,
-            PUERTO: metadata.port,
-            IP: metadata.ip,
-            METODOS_CLIENTE: metodosCliente,
+            PORT: metadata.port,
+            CLIENT_METHODS: clientMethods,
         });
 
-        // Client Main: plantilla de Luismi (Client.template.tpl)
-        const llamadasPrueba = metadata.methods.map(m => {
-            const defaultArgs = m.parametros.map(p => `"test_${p}"`).join(', ');
-            return `        const res_${m.nombre} = await client.${m.nombre}(${defaultArgs});\n        console.log("Result for ${m.nombre}:", res_${m.nombre});`;
+        const testCalls = metadata.methods.map(m => {
+            const defaultArgs = m.parameters.map(p => `"test_${p}"`).join(', ');
+            return `        const res_${m.name} = await client.${m.name}(${defaultArgs});\n        console.log("Result for ${m.name}:", res_${m.name});`;
         }).join('\n');
 
         const codeClientScript = this.applyTemplate('Client.template.tpl', {
             CLASS_NAME: className,
-            LLAMADAS_PRUEBA: llamadasPrueba,
+            TEST_CALLS: testCalls,
         });
 
-        // --- MOLDES LADO SERVIDOR (SKELETON) ---
-        // ServerRSI: plantilla de Laura (ServerRSI.template.tpl)
-        const metodosServidor = metadata.methods.map(m => {
+        const serverMethods = metadata.methods.map(m => {
             return (
-                `                        case '${m.nombre}': {
-                            const resultado = await this.bo.${m.nombre}(...args);
-                            socket.write(\`SUCCESS|\${resultado}\`);
+                `                        case '${m.name}': {
+                            const result = await this.service.${m.name}(...args);
+                            socket.write(\`SUCCESS|\${result}\`);
                             break;
                         }`
             );
@@ -171,38 +147,34 @@ class SDLCompiler {
 
         const codeServerRSI = this.applyTemplate('ServerRSI.template.tpl', {
             CLASS_NAME: className,
-            PUERTO: metadata.port,
-            METODOS_SERVIDOR: metodosServidor,
+            PORT: metadata.port,
+            SERVER_METHODS: serverMethods,
         });
 
-        // BO: plantilla de Luismi (BO.template.tpl)
-        const metodosBO = metadata.methods.map(m => {
-            return `    ${m.nombre}(${m.parametros.join(', ')}) {\n        // TODO: Hardcodee su lógica de negocio o "Hola Mundo" aquí\n        console.log("Ejecutando ${m.nombre} con:", ${m.parametros.length ? m.parametros.join(', ') : 'null'});\n        return "Hola desde el Servidor para: ${m.nombre}";\n    }`;
+        const serviceMethods = metadata.methods.map(m => {
+            return `    ${m.name}(${m.parameters.join(', ')}) {\n        console.log("Executing ${m.name} with:", ${m.parameters.length ? m.parameters.join(', ') : 'null'});\n        return "Hello from Server for: ${m.name}";\n    }`;
         }).join('\n\n');
 
-        const codeBO = this.applyTemplate('BO.template.tpl', {
+        const codeService = this.applyTemplate('Service.template.tpl', {
             CLASS_NAME: className,
-            METODOS_BO: metodosBO,
+            SERVICE_METHODS: serviceMethods,
         });
 
-        // Server Main: plantilla ejecutable
         const codeServerMain = this.applyTemplate('Server.template.tpl', {
             CLASS_NAME: className,
         });
 
-        // Escritura de archivos atómica (siempre UTF-8 para preservar tildes y emojis)
         const writeUTF8 = (path, content) => writeFileSync(path, content, 'utf-8');
 
-        writeUTF8(join(clientDir, `${className}Client.js`), codeClientScript);
-        writeUTF8(join(clientDir, `${className}Proxy.js`), codeProxy);
-        writeUTF8(join(clientDir, `${className}ClientRSI.js`), codeClientRSI);
+        writeUTF8(join(clientDir, `Client.js`), codeClientScript);
+        writeUTF8(join(clientDir, `Proxy.js`), codeProxy);
+        writeUTF8(join(clientDir, `ClientRSI.js`), codeClientRSI);
 
-        writeUTF8(join(serverDir, `${className}Server.js`), codeServerMain);
-        writeUTF8(join(serverDir, `${className}ServerRSI.js`), codeServerRSI);
-        writeUTF8(join(serverDir, `${className}BO.js`), codeBO);
+        writeUTF8(join(serverDir, `Server.js`), codeServerMain);
+        writeUTF8(join(serverDir, `ServerRSI.js`), codeServerRSI);
+        writeUTF8(join(serverDir, `Service.js`), codeService);
     }
 }
 
-// Inicialización del proceso
-const compiler = new SDLCompiler('saludo.sdl');
+const compiler = new SDLCompiler('greeter.sdl');
 compiler.compile();
